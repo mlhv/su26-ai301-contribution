@@ -1,9 +1,9 @@
-# Contribution [#]: [Issue Title]
+# Contribution [#1]: [Issue Title]
 
 **Contribution Number:** [1 / 2 / 3]  
-**Student:** [Your Name]  
+**Student:** Minh Le
 **Issue:** [GitHub issue link]  
-**Status:** [Phase I / Phase II / Phase III / Phase IV] [In Progress / Complete]
+**Status:** Phase 1 [In Progress]
 
 ---
 
