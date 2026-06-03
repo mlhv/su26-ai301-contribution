@@ -1,7 +1,7 @@
 # Contribution [#1]: [Issue Title]
 
-**Contribution Number:** [1 / 2 / 3]  
-**Student:** Minh Le
+**Contribution Number:** [1]  
+**Student:** [Minh Le]
 **Issue:** [GitHub issue link]  
 **Status:** Phase 1 [In Progress]
 
