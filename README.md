@@ -1,8 +1,8 @@
-# Contribution #1: [Issue Title]
+# Contribution #1: Question: Keycloak OIDC Configuration, limit login to specific groups
 
 **Contribution Number:** 1
 **Student:** Minh Le
-**Issue:** [GitHub issue link]  
+**Issue:** https://github.com/goharbor/harbor/issues/22730
 **Status:** Phase 1 [In Progress]
 
 ---
