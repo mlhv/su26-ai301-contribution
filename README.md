@@ -3,7 +3,7 @@
 **Contribution Number:** 1
 **Student:** Minh Le
 **Issue:** https://github.com/goharbor/harbor/issues/22730
-**Status:** Phase 1 [In Progress]
+**Status:** Phase 1 [Complete]
 
 ---
 
@@ -19,15 +19,15 @@ The feature itself asks for OIDC configs, which means that I would have to resea
 
 ### Problem Description
 
-There is no functionality to restrict users who are not in any Harbor groups to be able to login into specific Keycload groups. (aka limit login to specific groups based on Keycloak OIDC configurations)
+There is no functionality to restrict users who are not in any Harbor groups to be able to login into specific Keycloak groups. (aka limit login to specific groups based on Keycloak OIDC configurations)
 
 ### Expected Behavior
 
-[What should happen?]
+According to Keycloak OIDC configs, users should be/should not be able to access or login into specific Keycloak groups.
 
 ### Current Behavior
 
-[What actually happens?]
+All users (especially ones who are not in any harbot group) can log into configured group scopes from Keycloak.
 
 ### Affected Components
 
