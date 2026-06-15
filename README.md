@@ -3,7 +3,7 @@
 **Contribution Number:** 1
 **Student:** Minh Le
 **Issue:** https://github.com/goharbor/harbor/issues/22730
-**Status:** Phase 2 [In Progress]
+**Status:** Phase 3 [In Progress]
 
 ---
 
