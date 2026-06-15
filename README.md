@@ -44,14 +44,18 @@ I first had to fork the repo and then follow the Contribution.md file that they 
 ### Steps to Reproduce
 
 1. Build goharbor from the official Golang image
-2. [Step 2]
-3. [Observed result]
+2. Run own Keycloak instance
+3. Setup Keycloak realms, client (harbor), as well as test users and group. One user should be in a group, while the other is not.
+4. Change harbor's OIDC config to use keycloak
+5. Login using the 2 test users from step 3. They are both able to log in (which is the bug)
 
 ### Reproduction Evidence
 
-- **Commit showing reproduction:** [Link to commit in your fork]
+- **Commit showing reproduction:** [\[Link to commit in your fork\]](https://github.com/goharbor/harbor/pull/23371/changes/0fd4ad5d7b4a82fd3ccad8b4be69c73909a69b68)
+NOTE: This is a commit showing my attempts at reproducing the issue, but really its just the bugs/attempts in setting up the dev environments which required me to commit fixes and a PR. Reproducing the actual issue required me to tinker with the OIDC configs in harbor more than the actual codebase.
 - **Screenshots/logs:** [If applicable]
-- **My findings:** [What you discovered during reproduction]
+- **My findings:** 
+macOS is using VirtioFS on Docker Desktop. This conflicted with the setup configurations for Harbor's container as they tried mounting directories inside one another. I had to create a PR and modify the source code to support this. P.S there is no official arm64 image of harbor yet so this was to be expected.
 
 ---
 
@@ -59,11 +63,11 @@ I first had to fork the repo and then follow the Contribution.md file that they 
 
 ### Analysis
 
-[Your analysis of the root cause - what's causing the issue?]
+harbor is reading the groups token claim in the JWT (from Keycloak) and currently does not do anything to restrict login. 
 
 ### Proposed Solution
 
-[High-level description of your fix approach]
+If groups is empty, reject users' login.
 
 ### Implementation Plan
 
