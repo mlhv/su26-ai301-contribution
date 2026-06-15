@@ -64,7 +64,6 @@ I first had to fork the repo and then follow the Contribution.md file that they 
 - **Commit showing reproduction:** [\[Link to commit in your fork\]](https://github.com/goharbor/harbor/pull/23371/changes/0fd4ad5d7b4a82fd3ccad8b4be69c73909a69b68)
 NOTE: This is a commit showing my attempts at reproducing the issue, but really its just the bugs/attempts in setting up the dev environments which required me to commit fixes and a PR. Reproducing the actual issue required me to tinker with the OIDC configs in harbor more than the actual codebase.
 - **Actual fix branch going forward**: https://github.com/mlhv/harbor/tree/feat/oidc-login-groups
-- **Screenshots/logs:** [If applicable]
 - **My findings:** 
 macOS is using VirtioFS on Docker Desktop. This conflicted with the setup configurations for Harbor's container as they tried mounting directories inside one another. I had to create a PR and modify the source code to support this. P.S there is no official arm64 image of harbor yet so this was to be expected.
 
