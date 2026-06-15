@@ -31,7 +31,15 @@ All users (especially ones who are not in any harbor group) can log into configu
 
 ### Affected Components
 
-[Which parts of the codebase are involved?]
+- `src/common/const.go` — OIDC config key constants
+- `src/lib/config/metadata/metadatalist.go` — config key registry
+- `src/lib/config/models/model.go `— OIDCSetting struct
+- `src/pkg/oidc/helper.go` — OIDC token parsing and group logic
+- `src/pkg/oidc/helper_test.go` — unit tests for OIDC helpers
+- `src/core/controllers/oidc.go` — OIDC callback handler (login enforcement point)
+- `src/portal/src/app/base/left-side-nav/config/auth/config-auth.component.html` — admin UI
+- `src/portal/src/app/base/left-side-nav/config/config.ts` — frontend config model
+- `src/portal/src/i18n/lang/en-us-lang.json — UI strings`
 
 ---
 
@@ -63,7 +71,16 @@ macOS is using VirtioFS on Docker Desktop. This conflicted with the setup config
 
 ### Analysis
 
-harbor is reading the groups token claim in the JWT (from Keycloak) and currently does not do anything to restrict login. 
+Harbor is reading the groups token claim in the JWT (from Keycloak) and currently does not do anything to restrict login. 
+
+Harbor already has two group-related config fields that follow the same pattern we need:
+- `oidc_admin_group` — a single group name; members get sysadmin rights
+- `oidc_group_filter` — a regex; only matching groups are stored in the DB
+
+Neither of these gates login. The JWT group data is already being extracted correctly — the only missing piece is a check
+before the session is created.
+
+The enforcement point is `Callback()` in `src/core/controllers/oidc.go`, specifically after `oidc.UserInfoFromToken()` returns (groups are available) and before oc.PopulateUserSession() is called (session is created).
 
 ### Proposed Solution
 
@@ -73,20 +90,30 @@ If groups is empty, reject users' login.
 
 Using UMPIRE framework (adapted):
 
-**Understand:** [Restate the problem]
+**Understand:** Harbor needs a configurable allowlist of OIDC groups. Users not in any listed group must be denied login before a session is established.
 
-**Match:** [What similar patterns/solutions exist in the codebase?]
+**Match:** The pattern mirrors `oidc_admin_group` — a config string that Harbor reads at callback time and compares against the user's extracted groups. The f`ilterGroup()` function in `helper.go` shows the existing pattern for group-based logic. The `userInfoFromClaims()` function already
+sets `info.hasGroupClaim` which tells us whether the token included a groups claim at all.
 
 **Plan:** [Step-by-step implementation plan]
 1. [Modify file X to do Y]
 2. [Add function Z]
 3. [Update tests]
 
-**Implement:** [Link to your branch/commits as you work]
+**Implement:** https://github.com/mlhv/harbor/tree/feat/oidc-login-groups
 
-**Review:** [Self-review checklist - does it follow the project's contribution guidelines?]
+**Review:** 
+- [ ] Follows existing OIDC config patterns (oidc_admin_group, oidc_group_filter)
+- [ ] Backward compatible — empty field = no restriction
+- [ ] Unit tests for the new IsLoginAllowed() function
+- [ ] Signed commits (-s flag) per Harbor DCO requirement
+- [ ] No changes to unrelated files
 
-**Evaluate:** [How will you verify it works?]
+**Evaluate:** 
+1. Run unit tests
+2. Set oidc_login_groups: harbor via API, log in as alice (in harbor group) → succeeds
+3. Log in as bob (no group) → receives 401 "user is not a member of any authorized OIDC group"
+4. Clear oidc_login_groups to empty, log in as bob → succeeds (backward compatibility confirmed)
 
 ---
 
