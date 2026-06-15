@@ -27,7 +27,7 @@ According to Keycloak OIDC configs, users should be/should not be able to access
 
 ### Current Behavior
 
-All users (especially ones who are not in any harbot group) can log into configured group scopes from Keycloak.
+All users (especially ones who are not in any harbor group) can log into configured group scopes from Keycloak.
 
 ### Affected Components
 
@@ -39,11 +39,11 @@ All users (especially ones who are not in any harbot group) can log into configu
 
 ### Environment Setup
 
-[Notes on setting up your local development environment - challenges you faced, how you solved them]
+I first had to fork the repo and then follow the Contribution.md file that they provided. Then I created my own make/harbor.yml file based on the provided template which involved adding my own hostname, specifying whether an https connection was needed, as well as the default data volumes for the application once we ran the make build. (NOTE: harbor had macOS bugs for Docker Desktop so I had to open separate PRs to fix those!)
 
 ### Steps to Reproduce
 
-1. [Step 1]
+1. Build goharbor from the official Golang image
 2. [Step 2]
 3. [Observed result]
 
