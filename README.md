@@ -51,11 +51,13 @@ I first had to fork the repo and then follow the Contribution.md file that they 
 
 ### Steps to Reproduce
 
-1. Build goharbor from the official Golang image
-2. Run own Keycloak instance
-3. Setup Keycloak realms, client (harbor), as well as test users and group. One user should be in a group, while the other is not.
-4. Change harbor's OIDC config to use keycloak
-5. Login using the 2 test users from step 3. They are both able to log in (which is the bug)
+1. Build Harbor from the official Golang image: make install COMPILETAG=compile_golangimage
+2. Start a local Keycloak instance via Docker
+3. In Keycloak: create a harbor realm, a harbor client with client authentication enabled, a harbor group, user alice (member of harbor group), and user bob (no groups). Add a Group Membership mapper with token claim name groups, full group path OFF.
+4. Configure Harbor's OIDC settings via the API to point at the Keycloak realm, with oidc_groups_claim: groups
+5. Log in as alice via the OIDC button → succeeds
+6. Log in as bob via the OIDC button → also succeeds (this is the bug)
+
 
 ### Reproduction Evidence
 
