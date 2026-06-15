@@ -96,9 +96,14 @@ Using UMPIRE framework (adapted):
 sets `info.hasGroupClaim` which tells us whether the token included a groups claim at all.
 
 **Plan:** [Step-by-step implementation plan]
-1. [Modify file X to do Y]
-2. [Add function Z]
-3. [Update tests]
+1. Add constant OIDCLoginGroups = "oidc_login_groups"
+2. Register new key as a StringType in OIDC group
+3. Add LoginGroups string field to OIDCSetting struct
+4. Write failing tests for IsLoginAllowed() covering: user allowed in group, no user allowed, no group claim present, etc...
+5. Implement IsLoginAllowed function
+6. In Callback(), after UserInfoFromToken(), call config.OIDCSetting() and oidc.IsLoginAllowed().
+7. Add oidc_login_groups
+8. Modify frontend UI
 
 **Implement:** https://github.com/mlhv/harbor/tree/feat/oidc-login-groups
 
