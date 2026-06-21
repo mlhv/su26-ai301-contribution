@@ -141,7 +141,11 @@ sets `info.hasGroupClaim` which tells us whether the token included a groups cla
 
 ### Manual Testing
 
-[What you tested manually and results]
+1. I rebuilt and restarted Harbor first.
+2. I then set the `oidc_login_groups` to `harbor` via the API curl (frontend admin dashboard does not work for local)
+3. I tested alice (member of `harbor` group) and it succeeded! (lands on `harbor/projects`)
+4. I then logged out and tested bob (no group) and it returned a 401 error saying that "user is not a member of any authorized OIDC group"
+5. I cleared the setting with curl again to verify backward compatibility and logged in with Bob. This time it succeeded (no restriction as login groups field is empty)
 
 ---
 
