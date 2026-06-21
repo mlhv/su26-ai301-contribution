@@ -153,7 +153,7 @@ sets `info.hasGroupClaim` which tells us whether the token included a groups cla
 
 ### Week 3 Progress
 
-Built the oidc_login_groups feature end-to-end across all layers of the Harbor stack.
+Built the `oidc_login_groups` feature end-to-end across all layers of the Harbor stack.
 
 What was built: 
 - New config key wired through all four config layers: `const.go` (key name constant) → `metadatalist.go` (registration) → `model.go` (struct field) → `userconfig.go` (builder wire-up). Missing any one of these would silently return an empty value from the config system. 
@@ -177,15 +177,26 @@ Decisions made:
 - Group name matching is case-sensitive by design, consistent with the existing `oidc_group_filter` and the OIDC spec. Documented in a code comment.
 - The `IsLoginAllowed` function operates on raw pre-filter groups (from the token, before `oidc_group_filter` is applied). This is intentional and documented with a comment — `oidc_login_groups` and `oidc_group_filter` are orthogonal controls. 
 
-
-
 ### Week [Y] Progress
 
 [Continue documenting as you work]
 
 ### Code Changes
 
-- **Files modified:** [List]
+- **Files modified:** :
+- `api/v2.0/swagger.yaml` — new field in both Configurations and ConfigurationsResponse definitions
+- `src/common/const.go` — OIDCLoginGroups constant
+- `src/core/controllers/oidc.go` — IsLoginAllowed enforcement in browser callback
+- `src/lib/config/metadata/metadatalist.go`— config key registration
+- `src/lib/config/models/model.go` — LoginGroups field on OIDCSetting
+- `src/lib/config/userconfig.go` — builder wire-up
+- `src/pkg/oidc/helper.go` — IsLoginAllowed function
+- `src/pkg/oidc/helper_test.go`— 8 unit test cases + conditional DB init in TestMain
+- `src/portal/src/app/base/left-side-nav/config/auth/config-auth.component.html` — UI input field
+- `src/portal/src/app/base/left-side-nav/config/config.ts` — field declaration + constructor init
+- `src/portal/src/i18n/lang/` (10 files) — OIDC_LOGIN_GROUPS and OIDC_LOGIN_GROUPS_INFO strings
+- `src/server/middleware/security/oidc_cli.go` — IsLoginAllowed enforcement in CLI secret path
+
 - **Key commits:** [Links to important commits]
 - **Approach decisions:** [Why you chose certain approaches]
 
