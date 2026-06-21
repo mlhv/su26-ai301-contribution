@@ -171,6 +171,13 @@ Challenges faced:
 - Unit tests for `pkg/oidc` require `postgres` (the existing TestMain calls `test.InitDatabaseFromEnv()` unconditionally). Solved by making the DB init conditional on `POSTGRESQL_HOST` being set, allowing pure unit tests to run locally without a DB connection.
 - Config system has four separate layers that all need updating. Forgetting `userconfig.go` (the builder wire-up) is the most subtle miss — the DB stores the value correctly but `OIDCSetting()` always returns "".
 
+Decisions made:
+- When `oidc_login_groups` is set but `oidc_groups_claim` is empty, the log level is `ERROR` (not Warning) because this is a misconfiguration that silently blocks all users — it needs to stand out in logs. 
+- Used `config.SplitAndTrim` (an existing utility in `src/lib/config/userconfig.go`) instead of writing a manual split+trim loop — also fixes a subtle edge case where a trailing comma would produce an empty string entry.
+- Group name matching is case-sensitive by design, consistent with the existing `oidc_group_filter` and the OIDC spec. Documented in a code comment.
+- The `IsLoginAllowed` function operates on raw pre-filter groups (from the token, before `oidc_group_filter` is applied). This is intentional and documented with a comment — `oidc_login_groups` and `oidc_group_filter` are orthogonal controls. 
+
+
 
 ### Week [Y] Progress
 
