@@ -151,9 +151,26 @@ sets `info.hasGroupClaim` which tells us whether the token included a groups cla
 
 ## Implementation Notes
 
-### Week [X] Progress
+### Week 3 Progress
 
-[What you built this week, challenges faced, decisions made]
+Built the oidc_login_groups feature end-to-end across all layers of the Harbor stack.
+
+What was built: 
+- New config key wired through all four config layers: `const.go` (key name constant) → `metadatalist.go` (registration) → `model.go` (struct field) → `userconfig.go` (builder wire-up). Missing any one of these would silently return an empty value from the config system. 
+- `IsLoginAllowed(info *UserInfo, setting OIDCSetting)` bool in `pkg/oidc/helper.go` — the core enforcement function.
+- Enforcement in two login paths: `Callback()` in `core/controllers/oidc.go` (browser login) and `Generate()` in
+`server/middleware/security/oidc_cli.go` (docker CLI / API basic auth with CLI secret). The CLI path was discovered only during
+the final code review — missing it would have let blocked users authenticate via `docker login` indefinitely.
+- Swagger API model updated (`api/v2.0/swagger.yaml`) and Go models regenerated via `make gen_apis`. Without the swagger update,
+the new field is silently stripped when the frontend reads and writes config via the API.
+- Angular config UI (`config-auth.component.html`, `config.ts`) and `i18n` strings for all 10 supported locales.
+
+Challenges faced:
+- Two separate login paths: The browser OIDC callback (`Callback()`) and the CLI secret middleware (`oidc_cli.go`) are completely independent code paths. A restriction set in `Callback()` does not affect `docker login` at all — discovered during code review.
+- Swagger → generated models gap: The Go models in `src/server/v2.0/models/` are generated from `swagger.yaml`, not hand-written. Editing only the config code while forgetting the swagger spec means the API silently drops the field during JSON marshal/unmarshal.
+- Unit tests for `pkg/oidc` require `postgres` (the existing TestMain calls `test.InitDatabaseFromEnv()` unconditionally). Solved by making the DB init conditional on `POSTGRESQL_HOST` being set, allowing pure unit tests to run locally without a DB connection.
+- Config system has four separate layers that all need updating. Forgetting `userconfig.go` (the builder wire-up) is the most subtle miss — the DB stores the value correctly but `OIDCSetting()` always returns "".
+
 
 ### Week [Y] Progress
 
