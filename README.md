@@ -162,6 +162,8 @@ All 8 cases run with `go test ./pkg/oidc/... -run TestIsLoginAllowed -v` — no 
 
 Built the `oidc_login_groups` feature end-to-end across all layers of the Harbor stack.
 
+[Working branch link](https://github.com/mlhv/harbor/tree/feat/oidc-login-groups)
+
 What was built: 
 - New config key wired through all four config layers: `const.go` (key name constant) → `metadatalist.go` (registration) → `model.go` (struct field) → `userconfig.go` (builder wire-up). Missing any one of these would silently return an empty value from the config system. 
 - `IsLoginAllowed(info *UserInfo, setting OIDCSetting)` bool in `pkg/oidc/helper.go` — the core enforcement function.
