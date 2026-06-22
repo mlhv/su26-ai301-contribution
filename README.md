@@ -184,20 +184,26 @@ Decisions made:
 ### Code Changes
 
 - **Files modified:** :
-- `api/v2.0/swagger.yaml` — new field in both Configurations and ConfigurationsResponse definitions
-- `src/common/const.go` — OIDCLoginGroups constant
-- `src/core/controllers/oidc.go` — IsLoginAllowed enforcement in browser callback
+- `api/v2.0/swagger.yaml` — new field in both `Configurations` and `ConfigurationsResponse` definitions
+- `src/common/const.go` — `OIDCLoginGroups` constant
+- `src/core/controllers/oidc.go` — `IsLoginAllowed` enforcement in browser callback
 - `src/lib/config/metadata/metadatalist.go`— config key registration
-- `src/lib/config/models/model.go` — LoginGroups field on OIDCSetting
+- `src/lib/config/models/model.go` — `LoginGroups` field on `OIDCSetting`
 - `src/lib/config/userconfig.go` — builder wire-up
-- `src/pkg/oidc/helper.go` — IsLoginAllowed function
-- `src/pkg/oidc/helper_test.go`— 8 unit test cases + conditional DB init in TestMain
+- `src/pkg/oidc/helper.go` — `IsLoginAllowed` function
+- `src/pkg/oidc/helper_test.go`— 8 unit test cases + conditional DB init in `TestMain`
 - `src/portal/src/app/base/left-side-nav/config/auth/config-auth.component.html` — UI input field
 - `src/portal/src/app/base/left-side-nav/config/config.ts` — field declaration + constructor init
-- `src/portal/src/i18n/lang/` (10 files) — OIDC_LOGIN_GROUPS and OIDC_LOGIN_GROUPS_INFO strings
-- `src/server/middleware/security/oidc_cli.go` — IsLoginAllowed enforcement in CLI secret path
+- `src/portal/src/i18n/lang/` (10 files) — `OIDC_LOGIN_GROUPS` and `OIDC_LOGIN_GROUPS_INFO` strings
+- `src/server/middleware/security/oidc_cli.go` — `IsLoginAllowed` enforcement in CLI secret path
 
-- **Key commits:** [Links to important commits]
+- **Key commits:**:
+- [46996671 — feat(oidc): added IsLoginAllowed function](https://github.com/mlhv/harbor/commit/46996671e5a1f7dfed5a0803e584e0fa34c454a2)
+- [2fa5bf2e — feat(api): exposed oidc_login_groups in config API model](https://github.com/mlhv/harbor/commit/2fa5bf2eaeb97001ae52483850f443b9f264f549)
+- [892718d1 — feat(oidc): enforce login group restriction in OIDC callback](https://github.com/mlhv/harbor/commit/892718d1c51aea7b5207986388ba3e6b21d2ce70)
+- [c4e257da — feat(portal): add oidc_login_groups field to OIDC configuration UI](https://github.com/mlhv/harbor/commit/c4e257da10c7b4f969dfb032f3b0aaf46c52332c)
+- [393d30b5 — fix(oidc): patched cli secret (docker login) path ← found in final code review](https://github.com/mlhv/harbor/commit/393d30b507f285df938c0f282ffe23516cb3204b)
+
 - **Approach decisions:** [Why you chose certain approaches]
 
 ---
