@@ -130,14 +130,21 @@ sets `info.hasGroupClaim` which tells us whether the token included a groups cla
 
 ### Unit Tests
 
-- [ ] Test case 1: [Description]
-- [ ] Test case 2: [Description]
-- [ ] Test case 3: [Description]
+- [x] Test Case 1: No restriction configured — `IsLoginAllowed` returns `true` when `oidc_login_groups` is empty; confirms the feature is fully opt-in and backward compatible
+- [x] Test Case 2: User in allowed group — returns `true` when the user's token groups contain an exact match
+- [x] Test Case 3: User not in any allowed group — returns `false` when the user's groups have no overlap with the configured list
+- [x] Test Case 4: User in one of multiple allowed groups — returns `true` for a comma-separated list, matching on any one group
+- [x] Test Case 5: Spaces around group names are trimmed — `" harbor "` in the config matches `"harbor"` in the token
+- [x] Test Case 6: No group claim in token and restriction set — returns false and logs an `ERROR`; handles the misconfiguration case where `oidc_groups_claim` is not set
+- [x] Test Case 7: No group claim and no restriction — returns true; no group claim is not a problem when no restriction is configured
+- [x] Test Case 8: hitespace-only restriction — treats "   " the same as empty; no restriction applied
+
+All 8 cases run with `go test ./pkg/oidc/... -run TestIsLoginAllowed -v` — no database required. (The TestMain was modified to only call test.`InitDatabaseFromEnv()` when `POSTGRESQL_HOST` is set, making these the first pure unit tests in the pkg/oidc package.)
 
 ### Integration Tests
 
-- [ ] Integration scenario 1
-- [ ] Integration scenario 2
+- [ ] Browser login denied for a user not in `oidc_login_groups` (verified manually — see below)
+- [ ] CLI secret (`docker login`) denied for a user not in `oidc_login_groups` — the `oidc_cli.go` enforcement path, found during code review and added as part of this PR
 
 ### Manual Testing
 
