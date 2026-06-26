@@ -3,7 +3,7 @@
 **Contribution Number:** 1
 **Student:** Minh Le
 **Issue:** https://github.com/goharbor/harbor/issues/22730
-**Status:** Phase 4 [In Progress]
+**Status:** Phase 4 [Complete]
 
 ---
 
@@ -180,9 +180,20 @@ Challenges faced:
 - Unit tests for `pkg/oidc` require `postgres` (the existing TestMain calls `test.InitDatabaseFromEnv()` unconditionally). Solved by making the DB init conditional on `POSTGRESQL_HOST` being set, allowing pure unit tests to run locally without a DB connection.
 - Config system has four separate layers that all need updating. Forgetting `userconfig.go` (the builder wire-up) is the most subtle miss — the DB stores the value correctly but `OIDCSetting()` always returns "".
 
-### Week [Y] Progress
+### Week 4 Progress
 
-[Continue documenting as you work]
+Set up the local PostgreSQL dev environment so the `security` and `pkg/oidc` test suites can run end-to-end on macOS, then fixed the test issues surfaced by running them.
+
+- Local DB setup:
+Harbor's `src/server/middleware/security/` test suite calls `test.InitDatabaseFromEnv()` in `TestMain` unconditionally — without a reachable PostgreSQL it fatals before any test runs. On macOS, `harbor-db` runs on Docker's private `make_harbor` network with no host port mapping. Solved with a `socat` relay container:
+`docker run -d --rm --name harbor-db-socat --network make_harbor -p 5432:5432 alpine/socat TCP-LISTEN:5432,fork TCP:harbor-db:5432`
+
+Also discovered that `golang-migrate` resolves its migration scripts path relative to the test binary's working directory, not the repo root — overridden via `POSTGRES_MIGRATION_SCRIPTS_PATH`.
+
+Test fixes surfaced by running locally:
+- `TestOIDCCli` (the pre-existing happy-path test) broke after our change added `config.OIDCSetting(ctx)` to `Generate()`. In production, the request context carries an ORM session; in tests it doesn't. Fixed by adding `config.InitWithSettings(map[string]any{common.OIDCLoginGroups: ""})` to the test, switching config to an in-memory backend that needs no ORM.
+- Removed two unreachable `t.Skip("requires POSTGRESQL_HOST")` guards added earlier in `pkg/oidc/helper_test.go.` These were dead code — `TestMain` fatals before individual tests are reached when `POSTGRESQL_HOST` is unset, so the skip is never evaluated.
+
 
 ### Code Changes
 
@@ -217,15 +228,15 @@ Challenges faced:
 
 ## Pull Request
 
-**PR Link:** [GitHub PR URL when submitted]
+**PR Link:** https://github.com/goharbor/harbor/pull/23443
 
-**PR Description:** [Draft or final PR description - much of the content above can be adapted]
+**PR Description:** Adds a new `oidc_login_groups` configuration field that restricts OIDC login to users who are members of at least one specified group. When the field is empty (the default), all OIDC users can log in — existing gbehaviour is fully preserved.
 
 **Maintainer Feedback:**
 - [Date]: [Summary of feedback received]
 - [Date]: [How you addressed it]
 
-**Status:** [Awaiting review / Iterating / Approved / Merged]
+**Status:** [Awaiting review]
 
 ---
 
@@ -233,15 +244,15 @@ Challenges faced:
 
 ### Technical Skills Gained
 
-[What you learned technically]
+Learned how to write Go tests for packages, operating Docker Compose, knowledge of OIDC claims/authentication and JWT tokens.
 
 ### Challenges Overcome
-
-[What was hard and how you solved it]
+Setting up the local dev environment (especially when official macOS images are not available yet) I solved this challenge by raising a separate issue and PR surprisingly, which now puts into light more macOS support from now on in the repo.
 
 ### What I'd Do Differently Next Time
 
-[Reflection on your process]
+- Making sure that I reach out to the maintainers for help regarding the initial dev environment setup. 
+- Checking to see for every code change, if there is a corresponding test file to write tests in.
 
 ---
 
@@ -249,4 +260,4 @@ Challenges faced:
 
 - [Link to helpful documentation]
 - [Tutorial or Stack Overflow post that helped]
-- [GitHub issues or discussions that helped]
+- https://github.com/goharbor/harbor/issues/22730 - Main issue to be resolved.
