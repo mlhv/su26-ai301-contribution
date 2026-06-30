@@ -1,4 +1,4 @@
-# Contribution #2: Question: Keycloak OIDC Configuration, limit login to specific groups
+# Contribution #2: Switch in_queue and processing internal spans to logs
 
 **Contribution Number:** 2
 **Student:** Minh Le
