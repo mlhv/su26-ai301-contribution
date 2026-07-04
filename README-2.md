@@ -3,7 +3,7 @@
 **Contribution Number:** 2
 **Student:** Minh Le
 **Issue:** https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/issues/1193
-**Status:** Phase 1 [Complete]
+**Status:** Phase 2 [In Progress]
 
 ---
 
