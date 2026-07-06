@@ -9,9 +9,7 @@
 
 ## Why I Chose This Issue
 
-The issue interests me as it asks for a new feature request, and will likely involve looking through the whole codebase, and interacting with APIs; which is exactly what I'm looking for as I'm aiming for backend/infrastructure roles. The codebase itself is written in Go and Typescript which is also 2 of my most used languages (and I want to gain more expertise in them) 
-
-The feature itself asks for OIDC configs, which means that I would have to research about how OIDC works under the hood and how it all ties in with authentication (and a little bit of authorization from how it ties into OAuth 2.0). This will allow me to understand more about how security and auth is implemented from a deeper level. I hope to learn more about OIDC security protocols, and how to better navigate a large Go codebase.
+The issue interests me as it will involve learning about auto-instrumentation and I've been hearing a lot about eBPF technology and wanted to learn more about it. I have already had some exposure to the open-telemetry ecosystem so this will be a nice issue to work on.
 
 ---
 
