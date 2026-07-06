@@ -11,6 +11,8 @@
 
 The issue interests me as it will involve learning about auto-instrumentation and I've been hearing a lot about eBPF technology and wanted to learn more about it. I have already had some exposure to the open-telemetry ecosystem so this will be a nice issue to work on.
 
+Another reason that I chose this issue is the codebase is mainly written in C and I wanted to learn more about memory management/low-level debugging.
+
 ---
 
 ## Understanding the Issue
