@@ -3,7 +3,7 @@
 **Contribution Number:** 2
 **Student:** Minh Le
 **Issue:** https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/issues/1193
-**Status:** Phase 2 [In Progress]
+**Status:** Phase 3 [In Progress]
 
 ---
 
@@ -19,27 +19,28 @@ Another reason that I chose this issue is the codebase is mainly written in C an
 
 ### Problem Description
 
-There is no functionality to restrict users who are not in any Harbor groups to be able to login into specific Keycloak groups. (aka limit login to specific groups based on Keycloak OIDC configurations)
+OBI's traces exporter creates two full internal child spans, `"in queue"` and `"processing"`, for every request where there's an observable gap between the request arriving and its handler actually starting. These are complete sibling `ptrace.Span` records — each with its own `spanId`, `parentSpanId`, `traceId`, and timestamps — not lightweight annotations. For every request with queue time, this doubles the number of OTLP spans sent for that request (parent + 2 sub-spans instead of just the parent).
 
 ### Expected Behavior
 
-According to Keycloak OIDC configs, users should be/should not be able to access or login into specific Keycloak groups.
+Per the original issue, this queue/processing timing information should be represented in a less verbose way than two full sibling spans. The issue itself proposed span events as the fix ("perhaps span events are better choice for this information"). However, the OTel Span Event API (`AddEvent`/`RecordException`) has since been deprecated in favor of the Logs API (https://opentelemetry.io/blog/2026/deprecating-span-events/) — the underlying OTLP data model and the ability to view events on a span timeline aren't deprecated, only the API, but new work is steered toward logs. So the actual expected behavior, updated from the original issue, is: this data should become a log record, not a span event.
 
 ### Current Behavior
 
-All users (especially ones who are not in any harbor group) can log into configured group scopes from Keycloak.
+Every request with an observable queue gap (`RequestStart < Start < End`) produces exactly 3 sibling spans: `"in queue"` (`RequestStart` → `Start`), `"processing"` (`Start` → `End`), and the parent request span (e.g. `"GET /create-trace"`), all sharing one `traceId` and parented under the top span. Confirmed two ways: the existing `TestGenerateTraces` unit test, and a live docker-compose + real Jaeger repro querying `http://localhost:16686/api/traces` after sending requests through the actual eBPF pipeline.
 
 ### Affected Components
 
-- `src/common/const.go` — OIDC config key constants
-- `src/lib/config/metadata/metadatalist.go` — config key registry
-- `src/lib/config/models/model.go `— OIDCSetting struct
-- `src/pkg/oidc/helper.go` — OIDC token parsing and group logic
-- `src/pkg/oidc/helper_test.go` — unit tests for OIDC helpers
-- `src/core/controllers/oidc.go` — OIDC callback handler (login enforcement point)
-- `src/portal/src/app/base/left-side-nav/config/auth/config-auth.component.html` — admin UI
-- `src/portal/src/app/base/left-side-nav/config/config.ts` — frontend config model
-- `src/portal/src/i18n/lang/en-us-lang.json — UI strings`
+- `pkg/export/otel/tracesgen/tracesgen.go` — `createSubSpans`, `generateTracesWithAttributes` (span creation to be gated/suppressed by a new toggle)
+- `pkg/export/otel/traces.go` — `TracesReceiver`, `processSpans` (production wiring for the traces signal)
+- `pkg/export/otel/otelcfg/config_traces.go` — `TracesConfig` (existing pattern to mirror for the new `LogsConfig`)
+- `pkg/export/otel/otelcfg/config_logs.go` — new `LogsConfig` (to be created)
+- `pkg/export/otel/logsgen/logsgen.go` — new package building `plog.Logs` records (to be created)
+- `pkg/export/otel/logs.go` — new `LogsReceiver`/`getLogsExporter` (to be created)
+- `pkg/obi/config.go` — `Config` struct: new `Logs` field and `QueueProcessingAsLogsEnabled()` toggle helper
+- `pkg/appolly/instrumenter.go` — swarm pipeline graph wiring, new `OTELLogsReceiver` node
+- `internal/test/integration/` — integration test suite (real-Jaeger repro today; toggle-on variant to be added)
+- `schemas/obi/groups/traces.yaml` — weaver semantic-convention registry (new `queue.duration`/`processing.duration` attributes)
 
 ---
 
@@ -47,25 +48,24 @@ All users (especially ones who are not in any harbor group) can log into configu
 
 ### Environment Setup
 
-I first had to fork the repo and then follow the Contribution.md file that they provided. Then I created my own make/harbor.yml file based on the provided template which involved adding my own hostname, specifying whether an https connection was needed, as well as the default data volumes for the application once we ran the make build. (NOTE: harbor had macOS bugs for Docker Desktop so I had to open separate PRs to fix those!)
+Development environment: an OrbStack Ubuntu 26.04 (arm64) VM on Apple Silicon, matching the host architecture with no emulation. The repo fork is cloned onto the VM's native Linux disk rather than the virtiofs-shared `/Users` mount, since eBPF/BTF work needs real Linux filesystem semantics. Toolchain: Go 1.25.11 (installed directly from go.dev — apt's `golang-go` is too old for this repo's `go.mod`), `clang`, `clang-format`, `clang-tidy`, `make`, `docker.io`. Confirmed BTF support via `/sys/kernel/btf/vmlinux` (present). `make dev` (generate + compile-for-coverage) runs successfully. Also had to install `docker-compose-v2` via apt to get the `docker compose` subcommand working, since it wasn't present by default in this image.
 
 ### Steps to Reproduce
 
-1. Build Harbor from the official Golang image: make install COMPILETAG=compile_golangimage
-2. Start a local Keycloak instance via Docker
-3. In Keycloak: create a harbor realm, a harbor client with client authentication enabled, a harbor group, user alice (member of harbor group), and user bob (no groups). Add a Group Membership mapper with token claim name groups, full group path OFF.
-4. Configure Harbor's OIDC settings via the API to point at the Keycloak realm, with oidc_groups_claim: groups
-5. Log in as alice via the OIDC button → succeeds
-6. Log in as bob via the OIDC button → also succeeds (this is the bug)
-
+1. Run the existing unit test to confirm today's span-based behavior at the assertion level:
+   `go test ./pkg/export/otel/... -run TestGenerateTraces -v`
+2. Since the test only asserts pass/fail, add a temporary throwaway test that dumps the actual OTLP JSON span payload (via `ptrace.JSONMarshaler`) for a span with an observable queue gap, to see the real shape.
+3. Bring up the full integration docker-compose stack for a live, real-eBPF repro:
+   `OTEL_EBPF_EXECUTABLE_PATH="(pingclient|testserver)" docker compose -f internal/test/integration/docker-compose.yml up -d --build`
+4. Send requests through an endpoint that introduces an observable queue gap: `curl "http://localhost:8080/create-trace?delay=10ms&status=200"`
+5. Query Jaeger's API directly: `curl "http://localhost:16686/api/traces?service=testserver&operation=GET%20%2Fcreate-trace"`
+6. Tear down: `docker compose -f internal/test/integration/docker-compose.yml down -v`
 
 ### Reproduction Evidence
 
-- **Commit showing reproduction:** [\[Link to commit in your fork\]](https://github.com/goharbor/harbor/pull/23371/changes/0fd4ad5d7b4a82fd3ccad8b4be69c73909a69b68)
-NOTE: This is a commit showing my attempts at reproducing the issue, but really its just the bugs/attempts in setting up the dev environments which required me to commit fixes and a PR. Reproducing the actual issue required me to tinker with the OIDC configs in harbor more than the actual codebase.
-- **Actual fix branch going forward**: https://github.com/mlhv/harbor/tree/feat/oidc-login-groups
-- **My findings:** 
-macOS is using VirtioFS on Docker Desktop. This conflicted with the setup configurations for Harbor's container as they tried mounting directories inside one another. I had to create a PR and modify the source code to support this. P.S there is no official arm64 image of harbor yet so this was to be expected.
+- **Unit-level:** The throwaway JSON dump showed exactly the shape described above — `"in queue"` (kind 1/INTERNAL, `startTimeUnixNano`/`endTimeUnixNano` spanning `RequestStart`→`Start`), `"processing"` (kind 1/INTERNAL, `Start`→`End`), and the parent (kind 2/SERVER, `RequestStart`→`End`), all sharing one `traceId`, both children's `parentSpanId` pointing at the parent's `spanId`.
+- **Live/integration-level:** Querying Jaeger after sending real requests through the actual eBPF pipeline returned traces with exactly 3 spans each — e.g. trace `cdb4faf1...` with spans `in queue` → `07d2dccc...` (parent), `processing` → `07d2dccc...` (parent), `GET /create-trace` (parent, no parent ref) — repeated consistently across multiple requests.
+- **Feature branch:** https://github.com/mlhv/opentelemetry-ebpf-instrumentation/tree/queue-processing-spans-to-logs (implementation not yet started as of this writing; branch created off an up-to-date `upstream/main`, ready for task-by-task work).
 
 ---
 
@@ -73,56 +73,49 @@ macOS is using VirtioFS on Docker Desktop. This conflicted with the setup config
 
 ### Analysis
 
-Harbor is reading the groups token claim in the JWT (from Keycloak) and currently does not do anything to restrict login. 
+OBI already has a full traces export pipeline (`pkg/export/otel/traces.go`, `tracesgen/`) but no logs export pipeline exists anywhere in `pkg/export/otel/` today — only `metric` and `traces`/`tracesgen`. So this is "add a new signal," not a small API swap. The good news: the same collector exporter factories OBI already uses for traces (`otlpexporter`, `otlphttpexporter`, `debugexporter`) already support `CreateLogs` out of the box — the same OTLP exporter binary handles all signals — so a minimal logs pipeline is largely mechanical duplication of the existing traces pattern, not new architecture.
 
-Harbor already has two group-related config fields that follow the same pattern we need:
-- `oidc_admin_group` — a single group name; members get sysadmin rights
-- `oidc_group_filter` — a regex; only matching groups are stored in the DB
+For the opt-in toggle, this repo has two existing conventions: a bitmask `Features` pattern (`pkg/export/feature.go`) used for selecting *which metric families* get computed, and a simple per-feature `Enabled bool` pattern (`NodeJSConfig.Enabled`, `JavaConfig.Enabled`, `JVMRuntimeMetricsConfig.Enabled`) used for opt-in instrumentation behaviors. The latter fits this feature much better.
 
-Neither of these gates login. The JWT group data is already being extracted correctly — the only missing piece is a check
-before the session is created.
-
-The enforcement point is `Callback()` in `src/core/controllers/oidc.go`, specifically after `oidc.UserInfoFromToken()` returns (groups are available) and before oc.PopulateUserSession() is called (session is created).
+A real correctness question surfaced during design: since the new logs pipeline and the existing traces pipeline would independently read the same spans off the same queue, they need to agree on the same parent span ID for the log record to actually correlate with the trace a backend receives. Investigation into the eBPF layer (`bpf/generictracer/protocol_http.h` and equivalents) showed that a span ID is generated unconditionally for essentially every event regardless of incoming trace-context propagation, and a Go-side safety net (`pkg/ebpf/common/pids.go`'s `normalizeTraceContext`) backfills any exception — both of which run once, upstream of where the pipeline fans out to multiple independent subscribers. So the two receivers naturally agree without needing new coordination machinery.
 
 ### Proposed Solution
 
-If groups is empty, reject users' login.
-
-Add a new config field `oidc_login_groups` (comma-separated group names). After Harbor extracts user info from the OIDC token, check whether the user's groups intersect with the configured allowed groups. If `oidc_login_groups` is non-empty and the user has no matching group, return a 401. If `oidc_login_groups` is empty, all users are allowed (fully backward compatible).
+Add a plain config bool, `LogsConfig.QueueProcessingLogs`, gated by a derived helper `Config.QueueProcessingAsLogsEnabled()` that only returns true when a logs endpoint is *also* configured — so a half-configured toggle can never silently drop the queue/processing timing data. When enabled, `createSubSpans` stops firing entirely (replace, not additive — matching how the other opt-in toggles in this codebase work), and a new `LogsReceiver`/`logsgen` pipeline emits one combined log record per request (only when there was an observable queue gap), with both durations (`queue.duration`, `processing.duration`, in seconds) as attributes, correlated to the parent span via the log record's native `trace_id`/`span_id` fields.
 
 ### Implementation Plan
 
-Using UMPIRE framework (adapted):
+Using the UMPIRE framework:
 
-**Understand:** Harbor needs a configurable allowlist of OIDC groups. Users not in any listed group must be denied login before a session is established.
+**Understand:** OBI needs a brand-new logs export signal so the queue/processing timing information can be represented as a single log record instead of two extra full OTLP spans — following OTel's own guidance to target the Logs API instead of the now-deprecated span-events API for this kind of migration.
 
-**Match:** The pattern mirrors `oidc_admin_group` — a config string that Harbor reads at callback time and compares against the user's extracted groups. The f`ilterGroup()` function in `helper.go` shows the existing pattern for group-based logic. The `userInfoFromClaims()` function already
-sets `info.hasGroupClaim` which tells us whether the token included a groups claim at all.
+**Match:** The existing traces signal (`otelcfg.TracesConfig`, `tracesgen/tracesgen.go`, `traces.go`) is the pattern to mirror almost 1:1 — same collector exporter factories, same batch/queue/retry configuration knobs, same "new swarm node subscribing to the existing span queue" wiring pattern already used for the metrics sub-pipeline (`setupMetricsSubPipeline`, which subscribes to the same `exportableSpans` queue as `OTELTracesReceiver` today).
 
-**Plan:** [Step-by-step implementation plan]
-1. Add constant OIDCLoginGroups = "oidc_login_groups"
-2. Register new key as a StringType in OIDC group
-3. Add LoginGroups string field to OIDCSetting struct
-4. Write failing tests for IsLoginAllowed() covering: user allowed in group, no user allowed, no group claim present, etc...
-5. Implement IsLoginAllowed function
-6. In Callback(), after UserInfoFromToken(), call config.OIDCSetting() and oidc.IsLoginAllowed().
-7. Add oidc_login_groups
-8. Modify frontend UI
+**Plan:**
+1. Thread a `suppressQueueProcessingSpans` bool through `tracesgen.go`/`traces.go`/`instrumenter.go` with zero behavior change yet (hardcoded `false`), with a new test proving the toggle collapses 3 spans down to 1 when set.
+2. Add `otelcfg.LogsConfig`, mirroring `TracesConfig`'s endpoint/protocol/batch/queue/retry/backoff fields, plus the new `QueueProcessingLogs` toggle field.
+3. Add the `logsgen` package's `GenerateLogs` function, building `plog.Logs` records by reusing the existing, already-exported `tracesgen.GroupSpans` (for filtering/sampling) and a newly-exported `tracesgen.SpanStartTime` (for detecting the observable gap) — no reimplementation of that logic.
+4. Add `otel.LogsReceiver`/`getLogsExporter` in a new `logs.go`, reusing several already-existing package-private helpers from `traces.go` directly (`convertHeaders`, `emptyHost`, `udsHost`, `udsMiddleware`, `getTraceSettings`) since both files live in the same `otel` package.
+5. Wire everything into `pkg/obi/config.go` (new `Config.Logs` field, `QueueProcessingAsLogsEnabled()` helper, queue-config validation) and `pkg/appolly/instrumenter.go` (new `OTELLogsReceiver` swarm node; flip the Task 1 suppression flag from hardcoded `false` to the real derived value).
+6. Extend the integration test suite with a toggle-on variant (verified via OBI's own debug-protocol log output, since Jaeger doesn't expose a generic log-query API) and register the two new attributes in the `schemas/obi` weaver semantic-convention registry.
 
-**Implement:** https://github.com/mlhv/harbor/tree/feat/oidc-login-groups
+**Implement:** Not yet started. Branch `queue-processing-spans-to-logs` created off an up-to-date `upstream/main` and pushed to my fork: https://github.com/mlhv/opentelemetry-ebpf-instrumentation/tree/queue-processing-spans-to-logs
 
-**Review:** 
-- [ ] Follows existing OIDC config patterns (oidc_admin_group, oidc_group_filter)
-- [ ] Backward compatible — empty field = no restriction
-- [ ] Unit tests for the new IsLoginAllowed() function
-- [ ] Signed commits (-s flag) per Harbor DCO requirement
-- [ ] No changes to unrelated files
+**Review:**
+- [ ] Toggle defaults to off — zero behavior change for existing users who don't opt in
+- [ ] Toggle only takes effect when a logs endpoint is actually configured — no silent data loss from a half-configured toggle
+- [ ] Follows existing OBI patterns (mirrors `TracesConfig`/`traces.go`'s structure; reuses `tracesgen.GroupSpans`/`TraceAppResourceAttrs`/`AttrsToMap` instead of reimplementing them, per this repo's CONTRIBUTING.md guidance against duplicating existing functionality)
+- [ ] Unit tests for `logsgen.GenerateLogs`, the new span-suppression gating in `tracesgen`, and `LogsConfig`
+- [ ] Integration test confirming both toggle-off (unchanged, still 3 spans) and toggle-on (1 log record, 0 sub-spans) behavior
+- [ ] New attributes (`queue.duration`, `processing.duration`) registered in the `schemas/obi` weaver registry
+- [ ] No unrelated or opportunistic refactoring bundled into the change
+- [ ] `make fmt` / `make lint` clean before opening the PR
 
-**Evaluate:** 
-1. Run unit tests
-2. Set oidc_login_groups: harbor via API, log in as alice (in harbor group) → succeeds
-3. Log in as bob (no group) → receives 401 "user is not a member of any authorized OIDC group"
-4. Clear oidc_login_groups to empty, log in as bob → succeeds (backward compatibility confirmed)
+**Evaluate:** (Planned; not yet executed, since implementation hasn't started)
+1. Run the full unit test suite: `go test ./pkg/export/otel/... ./pkg/obi/... ./pkg/appolly/... -v`
+2. Re-run the toggle-off integration path to confirm zero regression — still exactly 3 spans (`"in queue"`, `"processing"`, parent) per request with observable queue time.
+3. Run the new toggle-on integration test and confirm exactly 1 log record (`event.name: "request.queue_processing"`, with `queue.duration`/`processing.duration` attributes) and 0 `"in queue"`/`"processing"` spans per request.
+4. Manually inspect the debug-protocol log output captured from OBI's own container logs to sanity-check the actual OTLP log payload shape.
 
 ---
 
