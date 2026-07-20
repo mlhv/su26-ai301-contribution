@@ -3,7 +3,7 @@
 **Contribution Number:** 2
 **Student:** Minh Le
 **Issue:** https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/issues/1193
-**Status:** Phase 3 [In Progress]
+**Status:** Phase 3 [Complete]
 
 ---
 
@@ -121,71 +121,71 @@ Using the UMPIRE framework:
 
 ## Testing Strategy
 
+*(Covers Tasks 1–4 of the implementation plan above. Task 5 — wiring `LogsConfig`/`LogsReceiver` into `pkg/obi/config.go` and `pkg/appolly/instrumenter.go`'s swarm graph — is in progress in a separate session as of this writing, so nothing below depends on that wiring existing yet.)*
+
 ### Unit Tests
 
-- [x] Test Case 1: No restriction configured — `IsLoginAllowed` returns `true` when `oidc_login_groups` is empty; confirms the feature is fully opt-in and backward compatible
-- [x] Test Case 2: User in allowed group — returns `true` when the user's token groups contain an exact match
-- [x] Test Case 3: User not in any allowed group — returns `false` when the user's groups have no overlap with the configured list
-- [x] Test Case 4: User in one of multiple allowed groups — returns `true` for a comma-separated list, matching on any one group
-- [x] Test Case 5: Spaces around group names are trimmed — `" harbor "` in the config matches `"harbor"` in the token
-- [x] Test Case 6: No group claim in token and restriction set — returns false and logs an `ERROR`; handles the misconfiguration case where `oidc_groups_claim` is not set
-- [x] Test Case 7: No group claim and no restriction — returns true; no group claim is not a problem when no restriction is configured
-- [x] Test Case 8: hitespace-only restriction — treats "   " the same as empty; no restriction applied
+- [x] Test Case 1: Span-suppression toggle collapses the sub-spans — `TestGenerateTraces/test_with_subtraces_-_queue_processing_suppressed` (`pkg/export/otel/traces_test.go`). With `suppressQueueProcessingSpans=true`, a request with an observable queue gap now emits exactly 1 span (the parent) instead of 3, and the parent takes the real eBPF-assigned `SpanID` directly rather than a freshly generated random one.
+- [x] Test Case 2: `LogsConfig.Enabled()` covers all four ways the logs signal turns on — `TestLogsConfig_Enabled` (`pkg/export/otel/otelcfg/config_logs_test.go`): disabled by default, enabled via a plain endpoint, enabled via `ProtocolDebug`, enabled via an injected `LogsConsumer`. Mirrors the same four cases already covered for `TracesConfig`/`MetricsConfig`.
+- [x] Test Case 3: Logs endpoint resolution — `TestHTTPLogsEndpoint` / `TestHTTPLogsEndpoint_CommonOnly`: a signal-specific `LogsEndpoint` takes precedence over `CommonEndpoint`, and a common endpoint alone still resolves correctly with `/v1/logs` appended.
+- [x] Test Case 4: Queue-config validation — `TestLogsConfig_NormalizeQueueConfig`: defaults `QueueSize` to `4 * BatchMaxSize` when unset, and rejects a `QueueSize` smaller than `2 * BatchMaxSize` (the same guard `TracesConfig` has — an under-sized queue silently drops every batch with `"element size too large"`, a failure mode that isn't obvious from the config alone).
+- [x] Test Case 5: `logsgen.GenerateLogs` emits exactly one combined log record when there's an observable queue gap — `TestGenerateLogs_ObservableGap`: asserts `EventName == "request.queue_processing"`, the log record's `trace_id`/`span_id` match the parent span's (the entire correlation mechanism this approach depends on), and `queue.duration`/`processing.duration` are correct to within 10ms.
+- [x] Test Case 6: `logsgen.GenerateLogs` emits zero log records when there's no observable gap — `TestGenerateLogs_NoObservableGap`: confirms "replace, not additive" doesn't invent timing data for requests that never queued.
+- [x] Test Case 7: `getLogsExporter` builds a working debug-protocol exporter that starts and shuts down cleanly — `TestGetLogsExporter_Debug`.
+- [x] Test Case 8: `getLogsExporter` rejects an invalid protocol string — `TestGetLogsExporter_InvalidProtocol`.
 
-All 8 cases run with `go test ./pkg/oidc/... -run TestIsLoginAllowed -v` — no database required. (The TestMain was modified to only call test.`InitDatabaseFromEnv()` when `POSTGRESQL_HOST` is set, making these the first pure unit tests in the pkg/oidc package.)
+All 8 cases (15 sub-tests) pass:
+```
+go test ./pkg/export/otel/... -run 'TestGenerateTraces|TestGetLogsExporter' -v
+go test ./pkg/export/otel/logsgen/... -v
+go test ./pkg/export/otel/otelcfg/... -run 'TestLogsConfig|TestHTTPLogsEndpoint' -v
+```
+`go build ./...` is also clean with all of Tasks 1–4's new/modified files in the tree — no compile-time drift between the new `logs`/`logsgen`/`config_logs` packages and the existing `otel`/`otelcfg` code they extend.
 
 ### Integration Tests
 
-- [ ] Browser login denied for a user not in `oidc_login_groups` (verified manually — see below)
-- [ ] CLI secret (`docker login`) denied for a user not in `oidc_login_groups` — the `oidc_cli.go` enforcement path, found during code review and added as part of this PR
+- [ ] Toggle-on variant confirming 0 "in queue"/"processing" spans + 1 log record through the real eBPF pipeline (real docker-compose + Jaeger, per the Reproduction Process environment above) — deferred to Task 6. Nothing to exercise end-to-end yet: `LogsReceiver` isn't subscribed to the live span queue until Task 5's `instrumenter.go` wiring lands.
+- [ ] Toggle-off regression check (still exactly 3 spans, unchanged) — also deferred to Task 6, since none of Tasks 1–4 change today's default-off behavior in the live pipeline.
 
 ### Manual Testing
 
-1. I rebuilt and restarted Harbor first.
-2. I then set the `oidc_login_groups` to `harbor` via the API curl (frontend admin dashboard does not work for local)
-3. I tested alice (member of `harbor` group) and it succeeded! (lands on `harbor/projects`)
-4. I then logged out and tested bob (no group) and it returned a 401 error saying that "user is not a member of any authorized OIDC group"
-5. I cleared the setting with curl again to verify backward compatibility and logged in with Bob. This time it succeeded (no restriction as login groups field is empty)
+Not yet performed for this contribution. The pieces built in Tasks 1–4 (suppression toggle, `LogsConfig`, `logsgen.GenerateLogs`, `LogsReceiver`/`getLogsExporter`) are each unit-tested in isolation but aren't wired into the live swarm pipeline yet (Task 5) or exercised through the docker-compose/real-Jaeger repro environment (Task 6). Manual verification will follow once that wiring lands.
 
 ---
 
 ## Implementation Notes
 
-### Week 3 Progress
+## Week 7
 
-Built the `oidc_login_groups` feature end-to-end across all layers of the Harbor stack.
+### Task 1 — Span-suppression toggle (committed: `12773ed6 feat(traces): add span-suppression toggle`)
 
-[Working branch link](https://github.com/mlhv/harbor/tree/feat/oidc-login-groups)
+Threaded a `suppressQueueProcessingSpans bool` parameter through the existing traces call chain end-to-end: `tracesgen.generateTracesWithAttributes` → `tracesgen.GenerateTracesWithSelectedResourceAttributes` → `otel.tracesOTELReceiver` (`makeTracesReceiver`/`processSpans`) → `otel.TracesReceiver` → `pkg/appolly/instrumenter.go`'s `newGraphBuilder`. Hardcoded to `false` at the `instrumenter.go` call site for this task, exactly as planned — zero behavior change until Task 5 flips it to a real derived value.
 
-What was built: 
-- New config key wired through all four config layers: `const.go` (key name constant) → `metadatalist.go` (registration) → `model.go` (struct field) → `userconfig.go` (builder wire-up). Missing any one of these would silently return an empty value from the config system. 
-- `IsLoginAllowed(info *UserInfo, setting OIDCSetting)` bool in `pkg/oidc/helper.go` — the core enforcement function.
-- Enforcement in two login paths: `Callback()` in `core/controllers/oidc.go` (browser login) and `Generate()` in
-`server/middleware/security/oidc_cli.go` (docker CLI / API basic auth with CLI secret). The CLI path was discovered only during
-the final code review — missing it would have let blocked users authenticate via `docker login` indefinitely.
-- Swagger API model updated (`api/v2.0/swagger.yaml`) and Go models regenerated via `make gen_apis`. Without the swagger update,
-the new field is silently stripped when the frontend reads and writes config via the API.
-- Angular config UI (`config-auth.component.html`, `config.ts`) and `i18n` strings for all 10 supported locales.
+Renamed the unexported `spanStartTime` to the exported `SpanStartTime` in `tracesgen.go` so `logsgen` (a separate package, added in Task 3) could reuse the exact same "was there an observable queue gap" calculation instead of reimplementing it.
 
-Challenges faced:
-- Two separate login paths: The browser OIDC callback (`Callback()`) and the CLI secret middleware (`oidc_cli.go`) are completely independent code paths. A restriction set in `Callback()` does not affect `docker login` at all — discovered during code review.
-- Swagger → generated models gap: The Go models in `src/server/v2.0/models/` are generated from `swagger.yaml`, not hand-written. Editing only the config code while forgetting the swagger spec means the API silently drops the field during JSON marshal/unmarshal.
-- Unit tests for `pkg/oidc` require `postgres` (the existing TestMain calls `test.InitDatabaseFromEnv()` unconditionally). Solved by making the DB init conditional on `POSTGRESQL_HOST` being set, allowing pure unit tests to run locally without a DB connection.
-- Config system has four separate layers that all need updating. Forgetting `userconfig.go` (the builder wire-up) is the most subtle miss — the DB stores the value correctly but `OIDCSetting()` always returns "".
+One deliberate behavior decision: when sub-spans are suppressed, the parent span now takes the real eBPF-assigned `SpanID` directly (when valid) rather than generating a fresh random one — matching how the code already behaves for spans that never had sub-spans in the first place, so there's exactly one code path for "no sub-spans," not two.
 
-### Week 4 Progress
+### Task 2 — `otelcfg.LogsConfig` (uncommitted)
 
-Set up the local PostgreSQL dev environment so the `security` and `pkg/oidc` test suites can run end-to-end on macOS, then fixed the test issues surfaced by running them.
+Mirrored `TracesConfig` field-for-field for settings that generalize (endpoint/protocol/batch/queue/retry/backoff), with two intentional deviations from a blind copy:
+- Backoff fields are namespaced per-signal (`OTEL_EBPF_LOGS_BACKOFF_*`) instead of reusing `TracesConfig`'s generically-named env vars — logs is a new signal with no existing precedent of those being intentionally *shared* across signals, so introducing a new shared name would have been an assumption, not a fact.
+- `SDKLogLevel` *is* intentionally the same env var as `TracesConfig`/`MetricsConfig` use, since that one is already an established shared knob.
 
-- Local DB setup:
-Harbor's `src/server/middleware/security/` test suite calls `test.InitDatabaseFromEnv()` in `TestMain` unconditionally — without a reachable PostgreSQL it fatals before any test runs. On macOS, `harbor-db` runs on Docker's private `make_harbor` network with no host port mapping. Solved with a `socat` relay container:
-`docker run -d --rm --name harbor-db-socat --network make_harbor -p 5432:5432 alpine/socat TCP-LISTEN:5432,fork TCP:harbor-db:5432`
+`NormalizeQueueConfig()` reuses the same "reject queue smaller than 2x batch size" guard `TracesConfig` has, for the same reason: the collector's memory queue silently drops every batch with `"element size too large"` if this is misconfigured, and that failure mode isn't obvious from the config alone.
 
-Also discovered that `golang-migrate` resolves its migration scripts path relative to the test binary's working directory, not the repo root — overridden via `POSTGRES_MIGRATION_SCRIPTS_PATH`.
+### Task 3 — `logsgen.GenerateLogs` (uncommitted)
 
-Test fixes surfaced by running locally:
-- `TestOIDCCli` (the pre-existing happy-path test) broke after our change added `config.OIDCSetting(ctx)` to `Generate()`. In production, the request context carries an ORM session; in tests it doesn't. Fixed by adding `config.InitWithSettings(map[string]any{common.OIDCLoginGroups: ""})` to the test, switching config to an in-memory backend that needs no ORM.
-- Removed two unreachable `t.Skip("requires POSTGRESQL_HOST")` guards added earlier in `pkg/oidc/helper_test.go.` These were dead code — `TestMain` fatals before individual tests are reached when `POSTGRESQL_HOST` is unset, so the skip is never evaluated.
+Deliberately thin: reuses `tracesgen.GroupSpans` (filtering/sampling), `tracesgen.TraceAppResourceAttrs`/`AttrsToMap` (resource attribute construction), and the newly-exported `tracesgen.SpanStartTime` from Task 1 (gap detection) — none of that logic is reimplemented. The only new logic is the record shape: one `plog.LogRecord` per request with an observable gap, `EventName` fixed to `"request.queue_processing"`, `trace_id`/`span_id` set directly from the request span (the whole correlation mechanism — no new ID-coordination machinery needed, per the design-phase investigation into the eBPF layer noted under Solution Approach above), and `queue.duration`/`processing.duration` as `double` attributes in seconds.
+
+Requests without an observable gap produce zero log records for that request, not a record with zero-valued durations — verified explicitly by `TestGenerateLogs_NoObservableGap`, since inventing a record with meaningless data would be worse than emitting nothing.
+
+### Task 4 — `otel.LogsReceiver` / `getLogsExporter` (uncommitted)
+
+Mirrors `traces.go`'s `tracesOTELReceiver`/`getTracesExporter` closely enough that it reuses several of that file's package-private helpers directly instead of duplicating them: `emptyHost`, `udsHost`, `udsMiddleware`, `getTraceSettings`, `convertHeaders` — all defined once in `traces.go` and shared since `logs.go` lives in the same `otel` package.
+
+One structural difference from `TracesReceiver`: `LogsReceiver` takes both `otelcfg.LogsConfig` *and* `otelcfg.TracesConfig`, not just its own config. This is intentional, not leftover scaffolding — the log record describes timing that's *part of* a trace, so it must be subject to the exact same accept/sample decision as that trace. Passing `tracesCfg` through gives `LogsReceiver` the same `InstrumentationSelection` and `Sampler` implementation the traces pipeline uses, so a request that traces would have dropped can't produce an orphaned log record with no corresponding span for a backend to correlate it against.
+
+`processSpans` skips `exp.ConsumeLogs` entirely when a span group produces zero log records (no request in the batch had an observable gap), rather than sending an empty `plog.Logs` batch — avoids exercising the exporter's batching/retry machinery for a no-op.
 
 
 ### Code Changes
