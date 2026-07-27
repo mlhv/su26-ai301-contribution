@@ -99,7 +99,7 @@ Using the UMPIRE framework:
 5. Wire everything into `pkg/obi/config.go` (new `Config.Logs` field, `QueueProcessingAsLogsEnabled()` helper, queue-config validation) and `pkg/appolly/instrumenter.go` (new `OTELLogsReceiver` swarm node; flip the Task 1 suppression flag from hardcoded `false` to the real derived value).
 6. Extend the integration test suite with a toggle-on variant (verified via OBI's own debug-protocol log output, since Jaeger doesn't expose a generic log-query API) and register the two new attributes in the `schemas/obi` weaver semantic-convention registry.
 
-**Implement:** Not yet started. Branch `queue-processing-spans-to-logs` created off an up-to-date `upstream/main` and pushed to my fork: https://github.com/mlhv/opentelemetry-ebpf-instrumentation/tree/queue-processing-spans-to-logs
+**Implement:** Branch `queue-processing-spans-to-logs` created off an up-to-date `upstream/main` and pushed to my fork: https://github.com/mlhv/opentelemetry-ebpf-instrumentation/tree/queue-processing-spans-to-logs
 
 **Review:**
 - [ ] Toggle defaults to off — zero behavior change for existing users who don't opt in
@@ -111,7 +111,7 @@ Using the UMPIRE framework:
 - [ ] No unrelated or opportunistic refactoring bundled into the change
 - [ ] `make fmt` / `make lint` clean before opening the PR
 
-**Evaluate:** (Planned; not yet executed, since implementation hasn't started)
+**Evaluate:** 
 1. Run the full unit test suite: `go test ./pkg/export/otel/... ./pkg/obi/... ./pkg/appolly/... -v`
 2. Re-run the toggle-off integration path to confirm zero regression — still exactly 3 spans (`"in queue"`, `"processing"`, parent) per request with observable queue time.
 3. Run the new toggle-on integration test and confirm exactly 1 log record (`event.name: "request.queue_processing"`, with `queue.duration`/`processing.duration` attributes) and 0 `"in queue"`/`"processing"` spans per request.
